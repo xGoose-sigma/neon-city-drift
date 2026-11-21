@@ -1,0 +1,963 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Neon City Drift Online</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#141c33">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #141c33; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; touch-action: none; }
+  canvas { display: block; width: 100%; height: 100%; }
+
+  #hud {
+    position: fixed; top: 10px; left: 12px; z-index: 10; pointer-events: none;
+    display: flex; flex-direction: column; gap: 4px;
+  }
+  .score-panel {
+    background: rgba(15, 22, 42, 0.78); backdrop-filter: blur(8px);
+    border: 1.5px solid rgba(0, 255, 240, 0.55); border-radius: 12px;
+    padding: 7px 13px; color: #fff; box-shadow: 0 4px 18px rgba(0, 255, 240, 0.25);
+  }
+  .score-label { font-size: 10px; letter-spacing: 1.2px; color: #7ef9ff; text-transform: uppercase; font-weight: 700; }
+  .score-val { font-size: 22px; font-weight: 900; color: #ffffff; text-shadow: 0 0 12px #00fff0; }
+  #drift-box {
+    background: rgba(45, 12, 38, 0.85); border: 1.5px solid #ff2a85;
+    border-radius: 12px; padding: 5px 12px; opacity: 0; transition: opacity 0.15s ease, transform 0.1s ease;
+    box-shadow: 0 0 20px rgba(255, 42, 133, 0.45);
+  }
+  #drift-box.active { opacity: 1; transform: scale(1.03); }
+  .drift-pts { font-size: 18px; font-weight: 900; color: #ff5ca8; text-shadow: 0 0 10px #ff2a85; }
+  .drift-mult { font-size: 12px; font-weight: 800; color: #ffe600; }
+
+  #net-status {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: rgba(15, 22, 42, 0.78); border: 1px solid rgba(255,255,255,0.25);
+    border-radius: 10px; padding: 4px 10px; font-size: 11px; font-weight: 800; color: #c7d7ff;
+  }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: #ffaa00; box-shadow: 0 0 8px #ffaa00; }
+  .dot.online { background: #00ff88; box-shadow: 0 0 8px #00ff88; }
+  .dot.offline { background: #ff3b5c; box-shadow: 0 0 8px #ff3b5c; }
+
+  #top-right {
+    position: fixed; top: 10px; right: 12px; z-index: 15;
+    display: flex; align-items: flex-start; gap: 8px;
+  }
+  .btn-top {
+    background: rgba(15, 22, 42, 0.82); backdrop-filter: blur(8px);
+    border: 1.5px solid rgba(255, 255, 255, 0.4); border-radius: 11px;
+    color: #fff; font-size: 13px; font-weight: 800; padding: 9px 12px;
+    cursor: pointer; pointer-events: auto; box-shadow: 0 4px 14px rgba(0,0,0,0.4);
+  }
+  .btn-top:active { transform: scale(0.93); background: rgba(0, 255, 240, 0.3); }
+
+  #speedo {
+    background: rgba(15, 22, 42, 0.78); backdrop-filter: blur(8px);
+    border: 1.5px solid rgba(255, 42, 133, 0.6); border-radius: 12px;
+    padding: 6px 12px; text-align: right; pointer-events: none;
+    box-shadow: 0 4px 18px rgba(255, 42, 133, 0.25);
+  }
+  #speed-val { font-size: 24px; font-weight: 900; font-style: italic; color: #fff; line-height: 1; text-shadow: 0 0 12px #ff2a85; }
+  #speed-unit { font-size: 9px; font-weight: 800; color: #ff8ec2; letter-spacing: 1px; }
+
+  #controls-left {
+    position: fixed; bottom: 18px; left: 16px; z-index: 20;
+    display: flex; gap: 12px;
+  }
+  #controls-right {
+    position: fixed; bottom: 18px; right: 16px; z-index: 20;
+    display: flex; align-items: flex-end; gap: 10px;
+  }
+  .ctrl-btn {
+    border-radius: 18px; backdrop-filter: blur(6px);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    color: #fff; font-weight: 900; transition: transform 0.06s, background 0.06s;
+  }
+  .steer-btn {
+    width: 72px; height: 72px; font-size: 28px;
+    background: rgba(18, 28, 54, 0.72); border: 2px solid rgba(0, 255, 240, 0.55);
+    box-shadow: 0 4px 16px rgba(0, 255, 240, 0.25);
+  }
+  .steer-btn.pressed {
+    background: rgba(0, 255, 240, 0.42); border-color: #00fff0; transform: scale(0.93);
+  }
+  .pedal-brake {
+    width: 62px; height: 82px; font-size: 12px;
+    background: rgba(55, 18, 32, 0.76); border: 2px solid rgba(255, 70, 95, 0.65);
+  }
+  .pedal-brake.pressed {
+    background: rgba(255, 60, 85, 0.5); border-color: #ff465f; transform: scale(0.94);
+  }
+  .pedal-handbrake {
+    width: 60px; height: 68px; font-size: 11px;
+    background: rgba(55, 45, 14, 0.76); border: 2px solid rgba(255, 215, 0, 0.65);
+    color: #ffe866;
+  }
+  .pedal-handbrake.pressed {
+    background: rgba(255, 215, 0, 0.45); border-color: #ffe600; transform: scale(0.94);
+  }
+  .pedal-gas {
+    width: 72px; height: 102px; font-size: 14px;
+    background: rgba(14, 52, 42, 0.78); border: 2px solid rgba(0, 255, 155, 0.65);
+    color: #7affc4; box-shadow: 0 4px 18px rgba(0, 255, 155, 0.25);
+  }
+  .pedal-gas.pressed {
+    background: rgba(0, 255, 155, 0.45); border-color: #00ff9b; transform: scale(0.94);
+  }
+  .btn-icon { font-size: 20px; margin-bottom: 2px; }
+</style>
+</head>
+<body>
+
+<canvas id="glcanvas"></canvas>
+
+<div id="hud">
+  <div class="score-panel">
+    <div class="score-label">Очки дрифта</div>
+    <div class="score-val" id="total-score">0</div>
+  </div>
+  <div id="net-status">
+    <span class="dot" id="net-dot"></span>
+    <span id="net-text">Подключение...</span>
+  </div>
+  <div id="drift-box">
+    <div class="drift-pts">+<span id="curr-drift">0</span></div>
+    <div class="drift-mult">КОМБО x<span id="mult-val">1</span></div>
+  </div>
+</div>
+
+<div id="top-right">
+  <button class="btn-top" id="btn-color">🎨 ЦВЕТ</button>
+  <button class="btn-top" id="btn-reset">↺ СБРОС</button>
+  <div id="speedo">
+    <div id="speed-val">0</div>
+    <div id="speed-unit">КМ/Ч</div>
+  </div>
+</div>
+
+<div id="controls-left">
+  <div class="ctrl-btn steer-btn" id="btn-left">◀</div>
+  <div class="ctrl-btn steer-btn" id="btn-right">▶</div>
+</div>
+
+<div id="controls-right">
+  <div class="ctrl-btn pedal-handbrake" id="btn-hb"><span class="btn-icon">⚡</span>РУЧНИК</div>
+  <div class="ctrl-btn pedal-brake" id="btn-brake"><span class="btn-icon">🛑</span>ТОРМОЗ</div>
+  <div class="ctrl-btn pedal-gas" id="btn-gas"><span class="btn-icon">🔥</span>ГАЗ</div>
+</div>
+
+<script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+<script>
+// ==================== МАТЕМАТИКА ====================
+const M4 = {
+  identity: () => new Float32Array([1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1]),
+  multiply: (a, b) => {
+    const out = new Float32Array(16);
+    for (let c = 0; c < 4; c++) {
+      for (let r = 0; r < 4; r++) {
+        out[c*4+r] = a[0*4+r]*b[c*4+0] + a[1*4+r]*b[c*4+1] + a[2*4+r]*b[c*4+2] + a[3*4+r]*b[c*4+3];
+      }
+    }
+    return out;
+  },
+  perspective: (fov, aspect, near, far) => {
+    const f = 1.0 / Math.tan(fov / 2), nf = 1 / (near - far);
+    return new Float32Array([f/aspect,0,0,0, 0,f,0,0, 0,0,(far+near)*nf,-1, 0,0,2*far*near*nf,0]);
+  },
+  lookAt: (eye, target, up) => {
+    let zx = eye[0]-target[0], zy = eye[1]-target[1], zz = eye[2]-target[2];
+    let len = Math.hypot(zx, zy, zz) || 1; zx/=len; zy/=len; zz/=len;
+    let xx = up[1]*zz - up[2]*zy, xy = up[2]*zx - up[0]*zz, xz = up[0]*zy - up[1]*zx;
+    len = Math.hypot(xx, xy, xz) || 1; xx/=len; xy/=len; xz/=len;
+    let yx = zy*xz - zz*xy, yy = zz*xx - zx*xz, yz = zx*xy - zy*xx;
+    return new Float32Array([
+      xx, yx, zx, 0,
+      xy, yy, zy, 0,
+      xz, yz, zz, 0,
+      -(xx*eye[0]+xy*eye[1]+xz*eye[2]), -(yx*eye[0]+yy*eye[1]+yz*eye[2]), -(zx*eye[0]+zy*eye[1]+zz*eye[2]), 1
+    ]);
+  },
+  translate: (m, x, y, z) => M4.multiply(m, new Float32Array([1,0,0,0, 0,1,0,0, 0,0,1,0, x,y,z,1])),
+  rotateY: (m, a) => {
+    const c = Math.cos(a), s = Math.sin(a);
+    return M4.multiply(m, new Float32Array([c,0,-s,0, 0,1,0,0, s,0,c,0, 0,0,0,1]));
+  },
+  rotateX: (m, a) => {
+    const c = Math.cos(a), s = Math.sin(a);
+    return M4.multiply(m, new Float32Array([1,0,0,0, 0,c,s,0, 0,-s,c,0, 0,0,0,1]));
+  },
+  rotateZ: (m, a) => {
+    const c = Math.cos(a), s = Math.sin(a);
+    return M4.multiply(m, new Float32Array([c,s,0,0, -s,c,0,0, 0,0,1,0, 0,0,0,1]));
+  },
+  scale: (m, sx, sy, sz) => M4.multiply(m, new Float32Array([sx,0,0,0, 0,sy,0,0, 0,0,sz,0, 0,0,0,1]))
+};
+
+// ==================== WEBGL ====================
+const canvas = document.getElementById('glcanvas');
+const gl = canvas.getContext('webgl', { antialias: true, powerPreference: 'high-performance' });
+
+const vsSource = `
+  attribute vec3 aPos;
+  attribute vec3 aNorm;
+  uniform mat4 uProj;
+  uniform mat4 uView;
+  uniform mat4 uModel;
+  varying vec3 vNorm;
+  varying vec3 vWorldPos;
+  void main() {
+    vec4 wp = uModel * vec4(aPos, 1.0);
+    vWorldPos = wp.xyz;
+    vNorm = mat3(uModel) * aNorm;
+    gl_Position = uProj * uView * wp;
+  }
+`;
+
+const fsSource = `
+  precision mediump float;
+  varying vec3 vNorm;
+  varying vec3 vWorldPos;
+  uniform vec3 uColor;
+  uniform vec3 uEmissive;
+  uniform vec3 uFogColor;
+  uniform float uFogDensity;
+  uniform vec3 uCarPos;
+  uniform vec3 uUnderglow;
+  void main() {
+    vec3 n = normalize(vNorm);
+    vec3 lightDir1 = normalize(vec3(0.45, 0.85, 0.35));
+    vec3 lightDir2 = normalize(vec3(-0.5, 0.6, -0.5));
+    float diff1 = max(dot(n, lightDir1), 0.0) * 0.65;
+    float diff2 = max(dot(n, lightDir2), 0.0) * 0.35;
+    float ambient = 0.52;
+
+    float distCar = length(vWorldPos - uCarPos);
+    float glow = clamp(1.0 - distCar / 11.0, 0.0, 1.0);
+    vec3 carGlow = uUnderglow * glow * glow * 0.7;
+
+    vec3 lit = uColor * (ambient + diff1 + diff2) + uEmissive + carGlow;
+    float dist = length(vWorldPos - uCarPos);
+    float fogFactor = clamp(exp(-pow(dist * uFogDensity, 2.0)), 0.0, 1.0);
+    gl_FragColor = vec4(mix(uFogColor, lit, fogFactor), 1.0);
+  }
+`;
+
+function createShader(type, src) {
+  const s = gl.createShader(type);
+  gl.shaderSource(s, src);
+  gl.compileShader(s);
+  return s;
+}
+const prog = gl.createProgram();
+gl.attachShader(prog, createShader(gl.VERTEX_SHADER, vsSource));
+gl.attachShader(prog, createShader(gl.FRAGMENT_SHADER, fsSource));
+gl.linkProgram(prog);
+gl.useProgram(prog);
+
+const loc = {
+  aPos: gl.getAttribLocation(prog, 'aPos'),
+  aNorm: gl.getAttribLocation(prog, 'aNorm'),
+  uProj: gl.getUniformLocation(prog, 'uProj'),
+  uView: gl.getUniformLocation(prog, 'uView'),
+  uModel: gl.getUniformLocation(prog, 'uModel'),
+  uColor: gl.getUniformLocation(prog, 'uColor'),
+  uEmissive: gl.getUniformLocation(prog, 'uEmissive'),
+  uFogColor: gl.getUniformLocation(prog, 'uFogColor'),
+  uFogDensity: gl.getUniformLocation(prog, 'uFogDensity'),
+  uCarPos: gl.getUniformLocation(prog, 'uCarPos'),
+  uUnderglow: gl.getUniformLocation(prog, 'uUnderglow')
+};
+
+const cubeVerts = new Float32Array([
+  -0.5,-0.5, 0.5,  0,0,1,   0.5,-0.5, 0.5,  0,0,1,   0.5, 0.5, 0.5,  0,0,1,  -0.5, 0.5, 0.5,  0,0,1,
+   0.5,-0.5,-0.5,  0,0,-1, -0.5,-0.5,-0.5,  0,0,-1, -0.5, 0.5,-0.5,  0,0,-1,  0.5, 0.5,-0.5,  0,0,-1,
+  -0.5, 0.5, 0.5,  0,1,0,   0.5, 0.5, 0.5,  0,1,0,   0.5, 0.5,-0.5,  0,1,0,  -0.5, 0.5,-0.5,  0,1,0,
+  -0.5,-0.5,-0.5,  0,-1,0,  0.5,-0.5,-0.5,  0,-1,0,  0.5,-0.5, 0.5,  0,-1,0, -0.5,-0.5, 0.5,  0,-1,0,
+   0.5,-0.5, 0.5,  1,0,0,   0.5,-0.5,-0.5,  1,0,0,   0.5, 0.5,-0.5,  1,0,0,   0.5, 0.5, 0.5,  1,0,0,
+  -0.5,-0.5,-0.5, -1,0,0,  -0.5,-0.5, 0.5, -1,0,0,  -0.5, 0.5, 0.5, -1,0,0,  -0.5, 0.5,-0.5, -1,0,0
+]);
+const cubeIdx = new Uint16Array([
+  0,1,2, 0,2,3,  4,5,6, 4,6,7,  8,9,10, 8,10,11,
+  12,13,14, 12,14,15,  16,17,18, 16,18,19,  20,21,22, 20,22,23
+]);
+
+const vbo = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+gl.bufferData(gl.ARRAY_BUFFER, cubeVerts, gl.STATIC_DRAW);
+
+const ibo = gl.createBuffer();
+gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ibo);
+gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, cubeIdx, gl.STATIC_DRAW);
+
+gl.enableVertexAttribArray(loc.aPos);
+gl.vertexAttribPointer(loc.aPos, 3, gl.FLOAT, false, 24, 0);
+gl.enableVertexAttribArray(loc.aNorm);
+gl.vertexAttribPointer(loc.aNorm, 3, gl.FLOAT, false, 24, 12);
+
+gl.enable(gl.DEPTH_TEST);
+gl.enable(gl.CULL_FACE);
+
+function drawBox(modelMat, color, emissive = [0,0,0]) {
+  gl.uniformMatrix4fv(loc.uModel, false, modelMat);
+  gl.uniform3fv(loc.uColor, color);
+  gl.uniform3fv(loc.uEmissive, emissive);
+  gl.drawElements(gl.TRIANGLES, 36, gl.UNSIGNED_SHORT, 0);
+}
+
+// ==================== ГОРОД ====================
+const staticBoxes = [];
+const colliders = [];
+
+const blockSize = 36;
+const roadWidth = 18;
+const gridRange = 5;
+const neonPalette = [
+  [0.0, 1.0, 0.96],
+  [1.0, 0.18, 0.58],
+  [0.72, 0.25, 1.0],
+  [1.0, 0.78, 0.0],
+  [0.15, 1.0, 0.48]
+];
+
+const winColors = [
+  [0.95, 0.92, 0.65],
+  [0.55, 0.92, 1.0],
+  [1.0, 0.65, 0.85]
+];
+
+let seed = 4219;
+function rand() { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; }
+
+for (let gx = -gridRange; gx <= gridRange; gx++) {
+  for (let gz = -gridRange; gz <= gridRange; gz++) {
+    const cx = gx * (blockSize + roadWidth);
+    const cz = gz * (blockSize + roadWidth);
+
+    const dashCol = [0.65, 0.72, 0.88];
+    const dashEm = [0.12, 0.15, 0.22];
+    for (let d = -20; d <= 20; d += 10) {
+      let m1 = M4.translate(M4.identity(), cx + blockSize/2 + roadWidth/2, 0.02, cz + d);
+      m1 = M4.scale(m1, 0.4, 0.02, 4.2);
+      staticBoxes.push({ m: m1, c: dashCol, e: dashEm });
+
+      let m2 = M4.translate(M4.identity(), cx + d, 0.02, cz + blockSize/2 + roadWidth/2);
+      m2 = M4.scale(m2, 4.2, 0.02, 0.4);
+      staticBoxes.push({ m: m2, c: dashCol, e: dashEm });
+    }
+
+    const crossCol = [0.85, 0.9, 1.0];
+    for (let s = -6; s <= 6; s += 3) {
+      let cw1 = M4.translate(M4.identity(), cx + blockSize/2 + roadWidth/2 + s, 0.025, cz + blockSize/2 + 1.5);
+      cw1 = M4.scale(cw1, 1.4, 0.02, 2.4);
+      staticBoxes.push({ m: cw1, c: crossCol, e: [0.15, 0.18, 0.25] });
+    }
+
+    if (gx === 0 && gz === 0) continue;
+
+    const halfB = blockSize * 0.5;
+    colliders.push({
+      minX: cx - halfB, maxX: cx + halfB,
+      minZ: cz - halfB, maxZ: cz + halfB
+    });
+
+    let sw = M4.translate(M4.identity(), cx, 0.2, cz);
+    sw = M4.scale(sw, blockSize, 0.4, blockSize);
+    staticBoxes.push({ m: sw, c: [0.34, 0.38, 0.50], e: [0.03, 0.04, 0.06] });
+
+    let curb = M4.translate(M4.identity(), cx, 0.38, cz);
+    curb = M4.scale(curb, blockSize + 0.2, 0.08, blockSize + 0.2);
+    staticBoxes.push({ m: curb, c: [0.62, 0.68, 0.82], e: [0.08, 0.1, 0.14] });
+
+    const poleCoords = [
+      [cx - halfB + 1.2, cz - halfB + 1.2],
+      [cx + halfB - 1.2, cz + halfB - 1.2]
+    ];
+    poleCoords.forEach(([px, pz]) => {
+      let pole = M4.translate(M4.identity(), px, 3.8, pz);
+      pole = M4.scale(pole, 0.25, 7.2, 0.25);
+      staticBoxes.push({ m: pole, c: [0.45, 0.5, 0.65], e: [0,0,0] });
+
+      let lamp = M4.translate(M4.identity(), px, 7.4, pz);
+      lamp = M4.scale(lamp, 1.1, 0.22, 1.1);
+      staticBoxes.push({ m: lamp, c: [1,1,1], e: [0.85, 0.92, 1.0] });
+    });
+
+    const h = 18 + rand() * 48;
+    const bw = blockSize - 3.6;
+    let bld = M4.translate(M4.identity(), cx, h/2 + 0.4, cz);
+    bld = M4.scale(bld, bw, h, bw);
+    const shade = 0.20 + rand() * 0.12;
+    staticBoxes.push({ m: bld, c: [shade, shade + 0.05, shade + 0.16], e: [0.02, 0.03, 0.06] });
+
+    const tierH = 4 + rand() * 6;
+    let tier = M4.translate(M4.identity(), cx, h + 0.4 + tierH/2, cz);
+    tier = M4.scale(tier, bw * 0.68, tierH, bw * 0.68);
+    staticBoxes.push({ m: tier, c: [shade + 0.04, shade + 0.09, shade + 0.2], e: [0.03, 0.04, 0.08] });
+
+    const neon = neonPalette[Math.floor(rand() * neonPalette.length)];
+    let r1 = M4.translate(M4.identity(), cx, h + 0.55, cz);
+    r1 = M4.scale(r1, bw + 0.4, 0.45, bw + 0.4);
+    staticBoxes.push({ m: r1, c: neon, e: [neon[0]*0.85, neon[1]*0.85, neon[2]*0.85] });
+
+    let r2 = M4.translate(M4.identity(), cx, h + 0.4 + tierH + 0.2, cz);
+    r2 = M4.scale(r2, bw * 0.68 + 0.3, 0.35, bw * 0.68 + 0.3);
+    staticBoxes.push({ m: r2, c: neon, e: [neon[0]*0.85, neon[1]*0.85, neon[2]*0.85] });
+
+    if (rand() > 0.45) {
+      let spire = M4.translate(M4.identity(), cx, h + 0.4 + tierH + 4.0, cz);
+      spire = M4.scale(spire, 0.35, 8.0, 0.35);
+      staticBoxes.push({ m: spire, c: neon, e: [neon[0]*0.9, neon[1]*0.9, neon[2]*0.9] });
+    }
+
+    const wCol = winColors[Math.floor(rand() * winColors.length)];
+    const wEm = [wCol[0]*0.55, wCol[1]*0.55, wCol[2]*0.55];
+    const floors = Math.floor((h - 4) / 4.2);
+    for (let f = 1; f <= floors; f++) {
+      if (rand() < 0.25) continue;
+      const wy = 2.5 + f * 4.0;
+      let winX = M4.translate(M4.identity(), cx, wy, cz);
+      winX = M4.scale(winX, bw + 0.16, 1.35, bw * 0.78);
+      staticBoxes.push({ m: winX, c: wCol, e: wEm });
+
+      let winZ = M4.translate(M4.identity(), cx, wy, cz);
+      winZ = M4.scale(winZ, bw * 0.78, 1.35, bw + 0.16);
+      staticBoxes.push({ m: winZ, c: wCol, e: wEm });
+    }
+  }
+}
+
+// ==================== РАСКРАСКИ ====================
+const carThemes = [
+  { body: [0.98, 0.10, 0.32], neon: [1.0, 0.12, 0.48] },
+  { body: [0.05, 0.85, 1.0],  neon: [0.0, 1.0, 0.95] },
+  { body: [1.0, 0.78, 0.05],  neon: [1.0, 0.82, 0.0] },
+  { body: [0.15, 0.95, 0.45], neon: [0.1, 1.0, 0.5] },
+  { body: [0.68, 0.22, 1.0],  neon: [0.75, 0.25, 1.0] },
+  { body: [0.96, 0.97, 1.0],  neon: [0.35, 0.85, 1.0] }
+];
+let currentThemeIdx = 0;
+
+// ==================== МУЛЬТИПЛЕЕР (MQTT) ====================
+const myId = 'drifter_' + Math.random().toString(36).substring(2, 10);
+const topicPrefix = 'neon_city_drift_global_v1/';
+const myTopic = topicPrefix + myId;
+const remotePlayers = new Map();
+
+const netDot = document.getElementById('net-dot');
+const netText = document.getElementById('net-text');
+
+function updateOnlineCount() {
+  const count = remotePlayers.size + 1;
+  netText.innerText = 'ОНЛАЙН: ' + count;
+}
+
+let mqttClient = null;
+try {
+  mqttClient = mqtt.connect('wss://broker.emqx.io:8084/mqtt', {
+    clientId: myId,
+    clean: true,
+    reconnectPeriod: 2000,
+    connectTimeout: 5000
+  });
+
+  mqttClient.on('connect', () => {
+    netDot.className = 'dot online';
+    updateOnlineCount();
+    mqttClient.subscribe(topicPrefix + '+');
+  });
+
+  mqttClient.on('reconnect', () => {
+    netDot.className = 'dot';
+    netText.innerText = 'Переподключение...';
+  });
+
+  mqttClient.on('offline', () => {
+    netDot.className = 'dot offline';
+    netText.innerText = 'Офлайн (1 игрок)';
+  });
+
+  mqttClient.on('message', (topic, message) => {
+    if (topic === myTopic) return;
+    const senderId = topic.slice(topicPrefix.length);
+    try {
+      const data = JSON.parse(message.toString());
+      if (data.bye) {
+        remotePlayers.delete(senderId);
+        updateOnlineCount();
+        return;
+      }
+      let p = remotePlayers.get(senderId);
+      if (!p) {
+        p = {
+          x: data.x, z: data.z, h: data.h,
+          tx: data.x, tz: data.z, th: data.h,
+          steer: data.s || 0,
+          roll: data.r || 0,
+          brake: !!data.b,
+          drift: !!data.d,
+          theme: data.c || 0,
+          wheelSpin: 0,
+          lastSeen: performance.now()
+        };
+        remotePlayers.set(senderId, p);
+        updateOnlineCount();
+      } else {
+        p.tx = data.x;
+        p.tz = data.z;
+        p.th = data.h;
+        p.steer = data.s || 0;
+        p.roll = data.r || 0;
+        p.brake = !!data.b;
+        p.drift = !!data.d;
+        p.theme = data.c || 0;
+        p.lastSeen = performance.now();
+      }
+    } catch (e) {}
+  });
+} catch (err) {
+  netDot.className = 'dot offline';
+  netText.innerText = 'Офлайн';
+}
+
+window.addEventListener('beforeunload', () => {
+  if (mqttClient && mqttClient.connected) {
+    mqttClient.publish(myTopic, JSON.stringify({ bye: 1 }));
+  }
+});
+
+// ==================== ФИЗИКА ====================
+const CAR_HALF_W = 1.05;
+const CAR_HALF_L = 2.15;
+
+const car = {
+  x: (Math.random() - 0.5) * 8,
+  z: (Math.random() - 0.5) * 8,
+  vx: 0, vz: 0,
+  heading: 0,
+  steer: 0,
+  wheelSpin: 0,
+  roll: 0
+};
+
+function resetCar() {
+  car.x = (Math.random() - 0.5) * 8;
+  car.z = (Math.random() - 0.5) * 8;
+  car.vx = 0; car.vz = 0;
+  car.heading = 0; car.steer = 0; car.roll = 0;
+  currDrift = 0; mult = 1; driftTimer = 0;
+}
+
+document.getElementById('btn-reset').addEventListener('click', resetCar);
+document.getElementById('btn-color').addEventListener('click', () => {
+  currentThemeIdx = (currentThemeIdx + 1) % carThemes.length;
+});
+
+function resolveCarCollisions() {
+  const sin = Math.sin(car.heading);
+  const cos = Math.cos(car.heading);
+  const extX = Math.abs(cos) * CAR_HALF_W + Math.abs(sin) * CAR_HALF_L;
+  const extZ = Math.abs(sin) * CAR_HALF_W + Math.abs(cos) * CAR_HALF_L;
+
+  let hitWall = false;
+  for (let i = 0; i < colliders.length; i++) {
+    const b = colliders[i];
+    if (car.x + extX <= b.minX || car.x - extX >= b.maxX ||
+        car.z + extZ <= b.minZ || car.z - extZ >= b.maxZ) {
+      continue;
+    }
+
+    const penLeft   = (car.x + extX) - b.minX;
+    const penRight  = b.maxX - (car.x - extX);
+    const penTop    = (car.z + extZ) - b.minZ;
+    const penBottom = b.maxZ - (car.z - extZ);
+    const minPen = Math.min(penLeft, penRight, penTop, penBottom);
+
+    if (minPen === penLeft) {
+      car.x = b.minX - extX;
+      if (car.vx > 0) car.vx *= -0.25;
+      car.vz *= 0.88;
+    } else if (minPen === penRight) {
+      car.x = b.maxX + extX;
+      if (car.vx < 0) car.vx *= -0.25;
+      car.vz *= 0.88;
+    } else if (minPen === penTop) {
+      car.z = b.minZ - extZ;
+      if (car.vz > 0) car.vz *= -0.25;
+      car.vx *= 0.88;
+    } else {
+      car.z = b.maxZ + extZ;
+      if (car.vz < 0) car.vz *= -0.25;
+      car.vx *= 0.88;
+    }
+    hitWall = true;
+  }
+  return hitWall;
+}
+
+// ==================== УПРАВЛЕНИЕ ====================
+const input = { left: false, right: false, gas: false, brake: false, hb: false };
+
+function bindTouchBtn(id, key) {
+  const el = document.getElementById(id);
+  const onDown = (e) => { e.preventDefault(); input[key] = true; el.classList.add('pressed'); };
+  const onUp = (e) => { e.preventDefault(); input[key] = false; el.classList.remove('pressed'); };
+  el.addEventListener('touchstart', onDown, { passive: false });
+  el.addEventListener('touchend', onUp, { passive: false });
+  el.addEventListener('touchcancel', onUp, { passive: false });
+  el.addEventListener('mousedown', onDown);
+  window.addEventListener('mouseup', () => { input[key] = false; el.classList.remove('pressed'); });
+}
+
+bindTouchBtn('btn-left', 'left');
+bindTouchBtn('btn-right', 'right');
+bindTouchBtn('btn-gas', 'gas');
+bindTouchBtn('btn-brake', 'brake');
+bindTouchBtn('btn-hb', 'hb');
+
+window.addEventListener('keydown', (e) => {
+  const k = e.key.toLowerCase();
+  if (k === 'a' || e.key === 'ArrowLeft') input.left = true;
+  if (k === 'd' || e.key === 'ArrowRight') input.right = true;
+  if (k === 'w' || e.key === 'ArrowUp') input.gas = true;
+  if (k === 's' || e.key === 'ArrowDown') input.brake = true;
+  if (e.code === 'Space') input.hb = true;
+  if (k === 'r') resetCar();
+  if (k === 'c') currentThemeIdx = (currentThemeIdx + 1) % carThemes.length;
+});
+window.addEventListener('keyup', (e) => {
+  const k = e.key.toLowerCase();
+  if (k === 'a' || e.key === 'ArrowLeft') input.left = false;
+  if (k === 'd' || e.key === 'ArrowRight') input.right = false;
+  if (k === 'w' || e.key === 'ArrowUp') input.gas = false;
+  if (k === 's' || e.key === 'ArrowDown') input.brake = false;
+  if (e.code === 'Space') input.hb = false;
+});
+
+// ==================== ЧАСТИЦЫ И СЛЕДЫ ====================
+const smokePool = [];
+const skidPool = [];
+
+function addSmoke(x, z) {
+  smokePool.push({
+    x: x + (Math.random() - 0.5) * 0.4,
+    y: 0.25,
+    z: z + (Math.random() - 0.5) * 0.4,
+    vx: (Math.random() - 0.5) * 1.4,
+    vy: 1.0 + Math.random() * 1.0,
+    vz: (Math.random() - 0.5) * 1.4,
+    life: 1.0,
+    size: 0.35 + Math.random() * 0.25
+  });
+  if (smokePool.length > 150) smokePool.shift();
+}
+
+function addSkid(x, z, rot) {
+  skidPool.push({ x, z, rot });
+  if (skidPool.length > 260) skidPool.shift();
+}
+
+// ==================== ОТРИСОВКА МАШИНЫ ====================
+function drawCarMesh(x, z, heading, steer, roll, wheelSpin, isBraking, themeIdx) {
+  const theme = carThemes[themeIdx % carThemes.length];
+  const bodyColor = theme.body;
+  const neonColor = theme.neon;
+  const darkMetal = [0.14, 0.16, 0.22];
+  const glassColor = [0.06, 0.12, 0.24];
+
+  let carBase = M4.translate(M4.identity(), x, 0, z);
+  carBase = M4.rotateY(carBase, heading);
+
+  let bodyMat = M4.rotateZ(carBase, roll);
+
+  let chassis = M4.translate(bodyMat, 0, 0.56, 0);
+  chassis = M4.scale(chassis, 2.04, 0.52, 4.28);
+  drawBox(chassis, bodyColor, [bodyColor[0]*0.12, bodyColor[1]*0.12, bodyColor[2]*0.12]);
+
+  let splitter = M4.translate(bodyMat, 0, 0.28, 2.12);
+  splitter = M4.scale(splitter, 2.1, 0.1, 0.32);
+  drawBox(splitter, darkMetal);
+
+  let hoodVent = M4.translate(bodyMat, 0, 0.84, 1.25);
+  hoodVent = M4.scale(hoodVent, 0.85, 0.06, 0.75);
+  drawBox(hoodVent, darkMetal);
+
+  let cabin = M4.translate(bodyMat, 0, 1.02, -0.22);
+  cabin = M4.scale(cabin, 1.66, 0.46, 2.05);
+  drawBox(cabin, glassColor, [0.04, 0.08, 0.16]);
+
+  let roof = M4.translate(bodyMat, 0, 1.26, -0.25);
+  roof = M4.scale(roof, 1.56, 0.05, 1.45);
+  drawBox(roof, bodyColor, [bodyColor[0]*0.1, bodyColor[1]*0.1, bodyColor[2]*0.1]);
+
+  [-0.78, 0.78].forEach(sx => {
+    let strut = M4.translate(bodyMat, sx, 0.98, -1.92);
+    strut = M4.scale(strut, 0.08, 0.34, 0.24);
+    drawBox(strut, darkMetal);
+  });
+  let wing = M4.translate(bodyMat, 0, 1.16, -1.96);
+  wing = M4.scale(wing, 2.12, 0.07, 0.36);
+  drawBox(wing, darkMetal);
+
+  [-0.68, 0.68].forEach(lx => {
+    let hl = M4.translate(bodyMat, lx, 0.60, 2.15);
+    hl = M4.scale(hl, 0.44, 0.13, 0.06);
+    drawBox(hl, [1, 1, 1], [1.0, 1.0, 1.0]);
+  });
+
+  const tailGlow = isBraking ? [1.0, 0.08, 0.15] : [0.75, 0.04, 0.1];
+  let tl = M4.translate(bodyMat, 0, 0.68, -2.15);
+  tl = M4.scale(tl, 1.86, 0.13, 0.06);
+  drawBox(tl, [1, 0.1, 0.15], tailGlow);
+
+  let ug = M4.translate(bodyMat, 0, 0.24, 0);
+  ug = M4.scale(ug, 1.75, 0.04, 3.6);
+  drawBox(ug, neonColor, neonColor);
+
+  const wPos = [
+    [-1.02, 0.38,  1.32, true],
+    [ 1.02, 0.38,  1.32, true],
+    [-1.02, 0.38, -1.32, false],
+    [ 1.02, 0.38, -1.32, false]
+  ];
+  wPos.forEach(([wx, wy, wz, isFront]) => {
+    let wm = M4.translate(carBase, wx, wy, wz);
+    if (isFront) wm = M4.rotateY(wm, steer);
+    wm = M4.rotateX(wm, wheelSpin);
+
+    let tire = M4.scale(wm, 0.32, 0.76, 0.76);
+    drawBox(tire, [0.12, 0.13, 0.16]);
+
+    let rim = M4.scale(wm, 0.35, 0.42, 0.42);
+    drawBox(rim, neonColor, [neonColor[0]*0.65, neonColor[1]*0.65, neonColor[2]*0.65]);
+  });
+}
+
+// ==================== ИГРОВОЙ ЦИКЛ ====================
+let totalScore = 0;
+let currDrift = 0;
+let mult = 1;
+let driftTimer = 0;
+let lastNetSend = 0;
+
+const scoreEl = document.getElementById('total-score');
+const driftBox = document.getElementById('drift-box');
+const currDriftEl = document.getElementById('curr-drift');
+const multEl = document.getElementById('mult-val');
+const speedEl = document.getElementById('speed-val');
+
+let camX = 0, camY = 5.5, camZ = -10;
+let lastTime = performance.now();
+
+function resize() {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  canvas.width = window.innerWidth * dpr;
+  canvas.height = window.innerHeight * dpr;
+  gl.viewport(0, 0, canvas.width, canvas.height);
+}
+window.addEventListener('resize', resize);
+resize();
+
+function loop(now) {
+  requestAnimationFrame(loop);
+  const dt = Math.min((now - lastTime) / 1000, 0.05);
+  lastTime = now;
+
+  // --- Физика своей машины ---
+  const fx = Math.sin(car.heading), fz = Math.cos(car.heading);
+  const rx = Math.cos(car.heading), rz = -Math.sin(car.heading);
+
+  let forwardSpeed = car.vx * fx + car.vz * fz;
+  let lateralSpeed = car.vx * rx + car.vz * rz;
+
+  if (input.gas) forwardSpeed += 44 * dt;
+  if (input.brake) forwardSpeed -= 54 * dt;
+  forwardSpeed = Math.max(-24, Math.min(64, forwardSpeed));
+
+  const targetSteer = (input.left ? 1 : 0) - (input.right ? 1 : 0);
+  car.steer += (targetSteer * 0.56 - car.steer) * 11 * dt;
+
+  const grip = input.hb ? 1.15 : 4.1;
+  lateralSpeed -= lateralSpeed * grip * dt;
+  forwardSpeed -= forwardSpeed * 0.45 * dt;
+
+  if (Math.abs(forwardSpeed) > 0.8) {
+    const dir = forwardSpeed > 0 ? 1 : -1;
+    const boost = input.hb ? 1.38 : 1.0;
+    car.heading += car.steer * (forwardSpeed * 0.066) * dir * boost * dt;
+  }
+
+  car.vx = fx * forwardSpeed + rx * lateralSpeed;
+  car.vz = fz * forwardSpeed + rz * lateralSpeed;
+
+  car.x += car.vx * dt;
+  car.z += car.vz * dt;
+
+  const hitWall = resolveCarCollisions();
+  if (hitWall) {
+    currDrift = 0; mult = 1; driftTimer = 0;
+  }
+
+  car.wheelSpin += forwardSpeed * dt * 2.4;
+  car.roll += (-lateralSpeed * 0.015 - car.roll) * 12 * dt;
+
+  // --- Дрифт и очки ---
+  const speedKmh = Math.round(Math.hypot(car.vx, car.vz) * 3.6);
+  const driftSlip = Math.abs(lateralSpeed);
+  const isDrifting = driftSlip > 4.2 && speedKmh > 22;
+
+  if (isDrifting) {
+    driftTimer += dt;
+    mult = Math.min(5, 1 + Math.floor(driftTimer / 1.8));
+    currDrift += Math.round(driftSlip * speedKmh * dt * 0.55) * mult;
+
+    driftBox.classList.add('active');
+    currDriftEl.innerText = currDrift;
+    multEl.innerText = mult;
+
+    const sin = Math.sin(car.heading), cos = Math.cos(car.heading);
+    const rlx = car.x - cos * 0.95 - sin * 1.35;
+    const rlz = car.z + sin * 0.95 - cos * 1.35;
+    const rrx = car.x + cos * 0.95 - sin * 1.35;
+    const rrz = car.z - sin * 0.95 - cos * 1.35;
+
+    addSmoke(rlx, rlz);
+    addSmoke(rrx, rrz);
+    addSkid(rlx, rlz, car.heading);
+    addSkid(rrx, rrz, car.heading);
+  } else {
+    if (currDrift > 0) {
+      totalScore += currDrift;
+      scoreEl.innerText = totalScore;
+      currDrift = 0; mult = 1; driftTimer = 0;
+    }
+    driftBox.classList.remove('active');
+  }
+
+  speedEl.innerText = speedKmh;
+
+  // --- Отправка координат в мультиплеер (15 раз/сек) ---
+  if (mqttClient && mqttClient.connected && now - lastNetSend > 66) {
+    lastNetSend = now;
+    mqttClient.publish(myTopic, JSON.stringify({
+      x: +car.x.toFixed(2),
+      z: +car.z.toFixed(2),
+      h: +car.heading.toFixed(3),
+      s: +car.steer.toFixed(2),
+      r: +car.roll.toFixed(3),
+      b: input.brake ? 1 : 0,
+      d: isDrifting ? 1 : 0,
+      c: currentThemeIdx
+    }));
+  }
+
+  // --- Обновление удалённых игроков ---
+  let needCountUpdate = false;
+  for (const [id, p] of remotePlayers) {
+    if (now - p.lastSeen > 5000) {
+      remotePlayers.delete(id);
+      needCountUpdate = true;
+      continue;
+    }
+    const prevX = p.x, prevZ = p.z;
+    p.x += (p.tx - p.x) * Math.min(1, 14 * dt);
+    p.z += (p.tz - p.z) * Math.min(1, 14 * dt);
+
+    let dh = p.th - p.h;
+    while (dh > Math.PI) dh -= Math.PI * 2;
+    while (dh < -Math.PI) dh += Math.PI * 2;
+    p.h += dh * Math.min(1, 14 * dt);
+
+    const moved = Math.hypot(p.x - prevX, p.z - prevZ);
+    p.wheelSpin += moved * 2.4;
+
+    if (p.drift && Math.random() < 0.6) {
+      const sin = Math.sin(p.h), cos = Math.cos(p.h);
+      const rlx = p.x - cos * 0.95 - sin * 1.35;
+      const rlz = p.z + sin * 0.95 - cos * 1.35;
+      const rrx = p.x + cos * 0.95 - sin * 1.35;
+      const rrz = p.z - sin * 0.95 - cos * 1.35;
+      addSmoke(rlx, rlz);
+      addSmoke(rrx, rrz);
+      addSkid(rlx, rlz, p.h);
+      addSkid(rrx, rrz, p.h);
+    }
+  }
+  if (needCountUpdate) updateOnlineCount();
+
+  // --- Камера ---
+  const idealX = car.x - Math.sin(car.heading) * 9.2;
+  const idealZ = car.z - Math.cos(car.heading) * 9.2;
+  const idealY = 4.6;
+  camX += (idealX - camX) * 9 * dt;
+  camY += (idealY - camY) * 9 * dt;
+  camZ += (idealZ - camZ) * 9 * dt;
+
+  // --- Рендер ---
+  const skyCol = [0.11, 0.16, 0.30];
+  gl.clearColor(skyCol[0], skyCol[1], skyCol[2], 1.0);
+  gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+  const proj = M4.perspective(62 * Math.PI / 180, canvas.width / canvas.height, 0.2, 320);
+  const view = M4.lookAt([camX, camY, camZ], [car.x, 1.3, car.z], [0, 1, 0]);
+
+  const myTheme = carThemes[currentThemeIdx];
+  gl.uniformMatrix4fv(loc.uProj, false, proj);
+  gl.uniformMatrix4fv(loc.uView, false, view);
+  gl.uniform3fv(loc.uFogColor, skyCol);
+  gl.uniform1f(loc.uFogDensity, 0.0068);
+  gl.uniform3fv(loc.uCarPos, [car.x, 0.5, car.z]);
+  gl.uniform3fv(loc.uUnderglow, myTheme.neon);
+
+  let ground = M4.translate(M4.identity(), car.x, -0.05, car.z);
+  ground = M4.scale(ground, 700, 0.1, 700);
+  drawBox(ground, [0.22, 0.25, 0.34], [0.02, 0.025, 0.04]);
+
+  for (let i = 0; i < staticBoxes.length; i++) {
+    const b = staticBoxes[i];
+    drawBox(b.m, b.c, b.e);
+  }
+
+  for (let i = 0; i < skidPool.length; i++) {
+    const s = skidPool[i];
+    let sm = M4.translate(M4.identity(), s.x, 0.015, s.z);
+    sm = M4.rotateY(sm, s.rot);
+    sm = M4.scale(sm, 0.36, 0.01, 0.85);
+    drawBox(sm, [0.05, 0.06, 0.09]);
+  }
+
+  for (let i = smokePool.length - 1; i >= 0; i--) {
+    const p = smokePool[i];
+    p.life -= dt * 1.4;
+    if (p.life <= 0) { smokePool.splice(i, 1); continue; }
+    p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt;
+    p.size += dt * 1.1;
+    let pm = M4.translate(M4.identity(), p.x, p.y, p.z);
+    pm = M4.scale(pm, p.size, p.size, p.size);
+    const shade = 0.72 + p.life * 0.25;
+    drawBox(pm, [shade, shade, shade + 0.05], [0.18 * p.life, 0.2 * p.life, 0.26 * p.life]);
+  }
+
+  // Своя машина
+  drawCarMesh(car.x, car.z, car.heading, car.steer, car.roll, car.wheelSpin, input.brake, currentThemeIdx);
+
+  // Машины реальных игроков
+  for (const [, p] of remotePlayers) {
+    drawCarMesh(p.x, p.z, p.h, p.steer, p.roll, p.wheelSpin, p.brake, p.theme);
+  }
+}
+
+requestAnimationFrame(loop);
+</script>
+
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => navigator.register('sw.js').catch(() => {}));
+}
+</script>
+</body>
+</html>
